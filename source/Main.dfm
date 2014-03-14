@@ -1,7 +1,7 @@
 object fmMain: TfmMain
   Left = 0
   Top = 0
-  Caption = 'B-Tree Builder'
+  Caption = 'B-Trie Builder'
   ClientHeight = 366
   ClientWidth = 545
   Color = clBtnFace
