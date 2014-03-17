@@ -55,9 +55,9 @@ procedure TBTrieController.DebugDraw(const aCanvas: TCanvas);
     else
       aCanvas.Brush.Color := clWebOrange;
     aCanvas.Ellipse(aX, aY, aX+60, aY+60);
-    aCanvas.TextOut(aX + 5, aY + 25, IntToStr(aNode.StartID) + ' - ' + IntToStr(aNode.EndID));
+    aCanvas.TextOut(aX + 7, aY + 25, IntToStr(aNode.StartID) + ' - ' + IntToStr(aNode.EndID));
     if aNode.IsLeaf then
-      aCanvas.TextOut(aX + 15, aY + 40, IntToStr(aNode.DataSize));
+      aCanvas.TextOut(aX + 17, aY + 40, IntToStr(aNode.DataSize));
     if Assigned(aNode.Sibling) then
     begin
       DrawNode(aNode.Sibling, aX + 80, aY);
