@@ -1,9 +1,9 @@
-program BTree;
+program BTrie;
 
 uses
   Vcl.Forms,
   Main in 'Main.pas' {Form1},
-  BTreeController in 'BTreeController.pas';
+  BTrieController in 'BTrieController.pas';
 
 {$R *.res}
 

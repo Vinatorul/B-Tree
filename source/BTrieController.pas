@@ -1,4 +1,4 @@
-unit BTree;
+unit BTrieController;
 
 interface
 
@@ -16,7 +16,7 @@ type
     DataSize: Integer;
   end;
 
-  TB_Tree = class
+  TBTrieController = class
   public
     procedure AddData(const aID: Integer; const aDataSize: Integer);
 
@@ -30,12 +30,12 @@ implementation
 
 { TB_Tree }
 
-procedure TB_Tree.AddData(const aID, aDataSize: Integer);
+procedure TBTrieController.AddData(const aID, aDataSize: Integer);
 begin
 
 end;
 
-function TB_Tree.GetNode(const aID): TNode;
+function TBTrieController.GetNode(const aID): TNode;
 begin
 
 end;
