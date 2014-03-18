@@ -62,7 +62,6 @@ var
   vIsNotHandled: Boolean;
   vNewNode: TNode;
   vTempData: TData;
-  vInd: Integer;
   vSiblingCounter: Integer;
   vInserted: Boolean;
   vInterator: Integer;
