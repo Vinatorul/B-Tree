@@ -60,14 +60,14 @@ object fmMain: TfmMain
       end
       object lblRandTest2: TLabel
         AlignWithMargins = True
-        Left = 251
+        Left = 249
         Top = 5
-        Width = 102
+        Width = 104
         Height = 18
         Margins.Top = 5
         Align = alRight
         Caption = ' '#1089#1083#1091#1095#1072#1081#1085#1099#1093' '#1079#1072#1087#1080#1089#1077#1081' '
-        ExplicitLeft = 231
+        ExplicitLeft = 251
         ExplicitHeight = 13
       end
       object btRandTest: TButton
