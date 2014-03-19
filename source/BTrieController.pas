@@ -70,8 +70,6 @@ var
   vNewNode: TNode;
   vTempData: TData;
   vInterator: Integer;
-  vOldData: TData;
-  vSiblingNode: TNode;
 begin
   if FRank = 0 then
   begin
@@ -107,8 +105,12 @@ begin
           if (vTempNode.Data.ActualSize + vDocDataDelta < (cMaxChunkSize * (100 - cReservedProcent))/100) or
            ((vDocInd >= 0) and (vTempNode.Data.ActualSize + vDocDataDelta < cMaxChunkSize)) then
           begin
-            while vTempNode.Data.ActualSize + vDocDataDelta >= (vTempNode.Data.Size * (100 - cReservedProcent))/100 do
-              vTempNode.Data.Size := vTempNode.Data.Size * 2;
+            if vDocInd < 0 then
+              while vTempNode.Data.ActualSize + vDocDataDelta >= (vTempNode.Data.Size * (100 - cReservedProcent))/100 do
+                vTempNode.Data.Size := vTempNode.Data.Size * 2
+            else
+              while vTempNode.Data.ActualSize + vDocDataDelta >= cMaxChunkSize do
+                vTempNode.Data.Size := vTempNode.Data.Size * 2;
             vTempNode.Data.ActualSize := vTempNode.Data.ActualSize + vDocDataDelta;
             if vDocInd >= 0 then
               vTempNode.Data.DocData[vDocInd].DocDataSize := aDataSize
@@ -225,6 +227,7 @@ end;
 
 procedure TBTrieController.SplitParent(const aNode: TNode);
 begin
+  Assert(aNode.IsLeaf);
 
 end;
 
@@ -237,7 +240,6 @@ var
   vNoNeighbour: Boolean;
   vInd: Integer;
 begin
-  vChainCounter := 0;
   vNeighbour := aNode.Parent.Child;
   vNoNeighbour := vNeighbour = aNode;
    vTempNode := TNode.Create;
@@ -256,10 +258,11 @@ begin
   vTempNode.EndID := -1;
   vTempNode.IsLeaf := True;
   vTempNode.Parent := aNode.Parent;
+  vChainCounter := 1;
   while Assigned(vOldCurNode) do
   begin
     vInd := 0;
-    while vInd < High(vOldCurNode.Data.DocData) do
+    while vInd < Length(vOldCurNode.Data.DocData) do
     begin
       if vTempNode.Data.ActualSize + vOldCurNode.Data.DocData[vInd].DocDataSize >= (cMaxChunkSize * (100 - cReservedProcent))/100 then
       begin
@@ -272,19 +275,24 @@ begin
         vTempNode.EndID := -1;
         vTempNode.IsLeaf := True;
         vTempNode.Parent := aNode.Parent;
+        inc(vChainCounter);
       end;
       SetLength(vTempNode.Data.DocData, Length(vTempNode.Data.DocData) + 1);
       vTempNode.Data.DocData[High(vTempNode.Data.DocData)] := vOldCurNode.Data.DocData[vInd];
       vTempNode.Data.ActualSize := vTempNode.Data.ActualSize + vOldCurNode.Data.DocData[vInd].DocDataSize;
       if (vTempNode.StartID = -1) or (vTempNode.StartID > vOldCurNode.Data.DocData[vInd].DocID) then
         vTempNode.StartID := vOldCurNode.Data.DocData[vInd].DocID;
-      if (vTempNode.EndID = -1) or (vTempNode.StartID < vOldCurNode.Data.DocData[vInd].DocID) then
+      if (vTempNode.EndID = -1) or (vTempNode.EndID < vOldCurNode.Data.DocData[vInd].DocID) then
         vTempNode.EndID := vOldCurNode.Data.DocData[vInd].DocID;
       Inc(vInd);
     end;
     vOldCurNode := vOldCurNode.Sibling;
   end;
-  vTempNode.Data.Size := vTempNode.Data.ActualSize + Round((vTempNode.Data.ActualSize * cReservedProcent)/100);
+  vTempNode.Data.Size := vTempNode.Data.ActualSize +
+    Round((vTempNode.Data.ActualSize * cReservedProcent)/100);
+  vTempNode.Parent.ChildsCounter := vChainCounter;
+  if vChainCounter > FRank then
+    SplitParent(vTempNode.Parent);
   DeleteChain(aNode);
 end;
 
