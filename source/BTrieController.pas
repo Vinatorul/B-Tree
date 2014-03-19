@@ -3,21 +3,9 @@ unit BTrieController;
 interface
 
 uses
-  Graphics, SysUtils;
+  Graphics, SysUtils, Generics.Defaults, Generics.Collections;
 
 type
-  TNode = class
-  public
-    Child: TNode;
-    Sibling: TNode;
-    StartID: Integer;
-    EndID: Integer;
-    IsLeaf: Boolean;
-    DataIndex: Integer;
-    Parent: TNode;
-    ChildsCounter: Integer;
-  end;
-
   TDocData = record
     DocID: Integer;
     DocDataSize: Integer;
@@ -29,6 +17,23 @@ type
     ActualSize: Integer;
   end;
 
+  TNode = class
+  public
+    Child: TNode;
+    Sibling: TNode;
+    StartID: Integer;
+    EndID: Integer;
+    IsLeaf: Boolean;
+    Data: TData;
+    Parent: TNode;
+    ChildsCounter: Integer;
+  end;
+
+  TDocDataCompare = class(TInterfacedObject, IComparer<TDocData>)
+  public
+    function Compare(const aFirstDoc, aSndDoc: TDocData): Integer;
+  end;
+
   TBTrieController = class
   public
     constructor Create;
@@ -38,14 +43,17 @@ type
     procedure DebugDraw(const aCanvas: TCanvas);
   private
     FRoot: TNode;
-    FData: TArray<TData>;
     FRank: Integer;
     function GetNode(const aID: Integer): TNode;
+    procedure UpdateParents(const aNode: TNode);
+    procedure SplitParent(const aNode: TNode);
+    procedure SplitSelf(var aNode: TNode);
+    procedure DeleteChain(var aNode: TNode);
   end;
 
 const
   cChunkSize = 4096;
-  cMaxChunkSize = 65536;
+  cMaxChunkSize = 32768;
   cReservedProcent = 20;
 
 implementation
@@ -59,12 +67,11 @@ var
   i: Integer;
   vDocDataDelta: Integer;
   vDocInd: Integer;
-  vIsNotHandled: Boolean;
   vNewNode: TNode;
   vTempData: TData;
-  vSiblingCounter: Integer;
-  vInserted: Boolean;
   vInterator: Integer;
+  vOldData: TData;
+  vSiblingNode: TNode;
 begin
   if FRank = 0 then
   begin
@@ -72,20 +79,17 @@ begin
     FRoot.StartID := aID;
     FRoot.EndID := aID;
     FRoot.IsLeaf := True;
-    SetLength(FData, 1);
-    SetLength(FData[0].DocData, 1);
-    FData[0].DocData[0].DocID := aID;
-    FData[0].DocData[0].DocDataSize := aDataSize;
-    FData[0].Size := cChunkSize;
-    FData[0].ActualSize := aDataSize;
-    FRoot.DataIndex := 0;
+    SetLength(FRoot.Data.DocData, 1);
+    FRoot.Data.DocData[0].DocID := aID;
+    FRoot.Data.DocData[0].DocDataSize := aDataSize;
+    FRoot.Data.Size := cChunkSize;
+    FRoot.Data.ActualSize := aDataSize;
     FRank := 1;
   end
   else
   begin
     vTempNode := FRoot;
-    vIsNotHandled := True;
-    while vIsNotHandled do
+    while True do
     begin
       if (aID <= vTempNode.EndID) or ((aID >= vTempNode.EndID) and (not Assigned(vTempNode.Sibling))) then
       begin
@@ -93,64 +97,61 @@ begin
         begin
           vDocDataDelta := aDataSize;
           vDocInd := -1;
-          for i := 0 to High(FData[vTempNode.DataIndex].DocData) do
-            if FData[vTempNode.DataIndex].DocData[i].DocID = aID then
+          for i := 0 to High(vTempNode.Data.DocData) do
+            if vTempNode.Data.DocData[i].DocID = aID then
             begin
-              vDocDataDelta := vDocDataDelta - FData[vTempNode.DataIndex].DocData[i].DocDataSize;
+              vDocDataDelta := vDocDataDelta - vTempNode.Data.DocData[i].DocDataSize;
               vDocInd := i;
               Break;
             end;
-          if FData[vTempNode.DataIndex].ActualSize + vDocDataDelta < cMaxChunkSize then
+          if (vTempNode.Data.ActualSize + vDocDataDelta < (cMaxChunkSize * (100 - cReservedProcent))/100) or
+           ((vDocInd >= 0) and (vTempNode.Data.ActualSize + vDocDataDelta < cMaxChunkSize)) then
           begin
-            while FData[vTempNode.DataIndex].ActualSize + vDocDataDelta >= FData[vTempNode.DataIndex].Size do
-              FData[vTempNode.DataIndex].Size := FData[vTempNode.DataIndex].Size * 2;
-            FData[vTempNode.DataIndex].ActualSize := FData[vTempNode.DataIndex].ActualSize + vDocDataDelta;
+            while vTempNode.Data.ActualSize + vDocDataDelta >= (vTempNode.Data.Size * (100 - cReservedProcent))/100 do
+              vTempNode.Data.Size := vTempNode.Data.Size * 2;
+            vTempNode.Data.ActualSize := vTempNode.Data.ActualSize + vDocDataDelta;
             if vDocInd >= 0 then
-              FData[vTempNode.DataIndex].DocData[vDocInd].DocDataSize := aDataSize
+              vTempNode.Data.DocData[vDocInd].DocDataSize := aDataSize
             else
             begin
-              SetLength(FData[vTempNode.DataIndex].DocData, Length(FData[vTempNode.DataIndex].DocData) + 1);
-              vDocInd := High(FData[vTempNode.DataIndex].DocData);
-              FData[vTempNode.DataIndex].DocData[vDocInd].DocDataSize := aDataSize;
-              FData[vTempNode.DataIndex].DocData[vDocInd].DocID := aID;
+              SetLength(vTempNode.Data.DocData, Length(vTempNode.Data.DocData) + 1);
+              vDocInd := High(vTempNode.Data.DocData);
+              vTempNode.Data.DocData[vDocInd].DocDataSize := aDataSize;
+              vTempNode.Data.DocData[vDocInd].DocID := aID;
+              TArray.Sort<TDocData>(vTempNode.Data.DocData, TDocDataCompare.Create);
             end;
             if vTempNode.StartID > aID then
               vTempNode.StartID := aID;
             if vTempNode.EndID < aID then
               vTempNode.EndID := aID;
-            vIsNotHandled := False;
+            UpdateParents(vTempNode);
           end
           else
           begin
-            if Assigned(vTempNode.Parent) then
-              vSiblingCounter := vTempNode.Parent.ChildsCounter
-            else
-              vSiblingCounter := 0;
-            vInserted := False;
-            vTempData.Size := FData[vTempNode.DataIndex].Size;
-            vInterator := 0;
-            while (vInterator < Length(FData[vTempNode.DataIndex].DocData)) and
-              (vTempData.ActualSize < (vTempData.Size * (100 - cReservedProcent))/100) do            
+            if not Assigned(vTempNode.Parent) then
             begin
-              if (not vInserted) and (FData[vTempNode.DataIndex].DocData[vInterator].DocID > aID) then
-              begin
-                SetLength(vTempData.DocData, Length(vTempData.DocData) + 1);
-                vTempData.ActualSize := vTempData.ActualSize + aDataSize;
-                vTempData.DocData[High(vTempData.DocData)].DocID := aID;
-                vTempData.DocData[High(vTempData.DocData)].DocDataSize := aDataSize;
-                vInserted := True;
-                Continue;
-              end
-              else if FData[vTempNode.DataIndex].DocData[vInterator].DocID = aID then
-                vInserted := True;
-              SetLength(vTempData.DocData, Length(vTempData.DocData) + 1);
-              vTempData.DocData[High(vTempData.DocData)] := FData[vTempNode.DataIndex].DocData[vInterator];
-              vTempData.ActualSize := vTempData.ActualSize + FData[vTempNode.DataIndex].DocData[vInterator].DocDataSize;
-              inc(vInterator);
+              FRoot := TNode.Create;
+              FRoot.Child := vTempNode;
+              FRank := FRank + 1;
+              FRoot.StartID := vTempNode.StartID;
+              FRoot.EndID := vTempNode.EndID;
+              FRoot.IsLeaf := False;
+              FRoot.ChildsCounter := 1;
+              vTempNode.Parent := FRoot;
             end;
-            FData[vTempNode.DataIndex] := vTempData;
-            vIsNotHandled := False;
+            if vDocInd >= 0 then
+              vTempNode.Data.DocData[vDocInd].DocDataSize := aDataSize
+            else
+            begin
+              SetLength(vTempNode.Data.DocData, Length(vTempNode.Data.DocData) + 1);
+              vDocInd := High(vTempNode.Data.DocData);
+              vTempNode.Data.DocData[vDocInd].DocDataSize := aDataSize;
+              vTempNode.Data.DocData[vDocInd].DocID := aID;
+              TArray.Sort<TDocData>(vTempNode.Data.DocData, TDocDataCompare.Create);
+            end;
+            SplitSelf(vTempNode);
           end;
+          Break;
         end
         else
         begin
@@ -173,7 +174,6 @@ end;
 constructor TBTrieController.Create;
 begin
   FRank := 0;
-  FData := nil;
 end;
 
 procedure TBTrieController.DebugDraw(const aCanvas: TCanvas);
@@ -187,18 +187,21 @@ procedure TBTrieController.DebugDraw(const aCanvas: TCanvas);
     aCanvas.Ellipse(aX, aY, aX+60, aY+60);
     aCanvas.TextOut(aX + 7, aY + 20, IntToStr(aNode.StartID) + ' - ' + IntToStr(aNode.EndID));
     if aNode.IsLeaf then
-      aCanvas.TextOut(aX + 7, aY + 35, IntToStr(FData[aNode.DataIndex].ActualSize) + '/' + IntToStr(FData[aNode.DataIndex].Size));
+      aCanvas.TextOut(aX + 7, aY + 35, IntToStr(aNode.Data.ActualSize) + '/' +
+        IntToStr(aNode.Data.Size));
     if Assigned(aNode.Sibling) then
     begin
       DrawNode(aNode.Sibling, aX + 80, aY);
       aCanvas.Brush.Color := clBlack;
-      aCanvas.LineTo(aX + 80, aY);
+      aCanvas.MoveTo(aX + 30, aY + 30);
+      aCanvas.LineTo(aX + 110, aY + 30);
     end;
     if Assigned(aNode.Child) then
     begin
       DrawNode(aNode.Child, aX - 80, aY + 80);
       aCanvas.Brush.Color := clBlack;
-      aCanvas.LineTo(aX + 80, aY);
+      aCanvas.MoveTo(aX + 30, aY + 30);
+      aCanvas.LineTo(aX - 50, aY + 110);
     end;
   end;
 
@@ -207,9 +210,67 @@ begin
     DrawNode(FRoot, 300, 10);
 end;
 
+procedure TBTrieController.DeleteChain(var aNode: TNode);
+begin
+  if Assigned(aNode.Sibling) then
+    DeleteChain(aNode.Sibling);
+  FreeAndNil(aNode);
+end;
+
 function TBTrieController.GetNode(const aID: Integer): TNode;
 begin
 
+end;
+
+procedure TBTrieController.SplitParent(const aNode: TNode);
+begin
+
+end;
+
+procedure TBTrieController.SplitSelf(var aNode: TNode);
+var
+  vChainCounter: Integer;
+  vTempNode: TNode;
+  vOldCurNode: TNode;
+  vNeighbour: TNode;
+  vNoNeighbour: Boolean;
+begin
+  vChainCounter := 0;
+  vNeighbour := aNode.Parent.Child;
+  vNoNeighbour := vNeighbour = aNode;
+  while vNeighbour.Sibling <> aNode do
+    vNeighbour := vNeighbour.Sibling;
+  vOldCurNode := aNode;
+  vTempNode := TNode.Create;
+  if vNoNeighbour then
+    aNode.Sibling.Child := vTempNode
+  else
+    vNeighbour.Sibling := vTempNode;
+  vTempNode.IsLeaf := True;
+  DeleteChain(aNode);
+end;
+
+procedure TBTrieController.UpdateParents(const aNode: TNode);
+begin
+  if not Assigned(aNode.Parent) then
+    Exit;
+  if aNode.Parent.StartID > aNode.StartID then
+    aNode.Parent.StartID := aNode.StartID;
+  if aNode.Parent.EndID < aNode.EndID then
+    aNode.Parent.EndID := aNode.EndID;
+  UpdateParents(aNode.Parent);
+end;
+
+{ TDocDataCompare }
+
+function TDocDataCompare.Compare(const aFirstDoc, aSndDoc: TDocData): Integer;
+begin
+  if aFirstDoc.DocID > aSndDoc.DocID then
+    Result := 1
+  else if aFirstDoc.DocID < aSndDoc.DocID then
+    Result := -1
+  else
+    Result := 0;
 end;
 
 end.

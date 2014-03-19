@@ -60,10 +60,8 @@ var
   i: Integer;
 begin
   for i := 0 to FRandomTestCounter - 1 do
-  begin
-    FBTrie.AddData(Random(1000), Random(512));
-    FBTrie.DebugDraw(JvScrollBox1.Canvas);
-  end;
+    FBTrie.AddData(Random(10000), Random(1024));
+  FBTrie.DebugDraw(JvScrollBox1.Canvas);
 end;
 
 procedure TfmMain.SpinEdit1Change(Sender: TObject);

@@ -36,8 +36,6 @@ object fmMain: TfmMain
     Align = alBottom
     Caption = #1058#1077#1089#1090#1080#1088#1086#1074#1072#1085#1080#1077
     TabOrder = 0
-    ExplicitLeft = 1
-    ExplicitTop = 253
     object pnlRandTest: TPanel
       Left = 2
       Top = 15
@@ -53,24 +51,24 @@ object fmMain: TfmMain
         AlignWithMargins = True
         Left = 3
         Top = 5
-        Width = 77
+        Width = 50
         Height = 18
         Margins.Top = 5
         Align = alLeft
         Caption = #1044#1086#1073#1072#1074#1080#1090#1100
-        ExplicitLeft = 0
-        ExplicitTop = 4
-        ExplicitHeight = 19
+        ExplicitHeight = 13
       end
       object lblRandTest2: TLabel
         AlignWithMargins = True
-        Left = 231
+        Left = 251
         Top = 5
-        Width = 122
+        Width = 102
         Height = 18
         Margins.Top = 5
         Align = alRight
         Caption = ' '#1089#1083#1091#1095#1072#1081#1085#1099#1093' '#1079#1072#1087#1080#1089#1077#1081' '
+        ExplicitLeft = 231
+        ExplicitHeight = 13
       end
       object btRandTest: TButton
         Left = 356
@@ -81,15 +79,12 @@ object fmMain: TfmMain
         Caption = #1044#1086#1073#1072#1074#1080#1090#1100' '#1079#1072#1087#1080#1089#1080
         TabOrder = 0
         OnClick = btRandTestClick
-        ExplicitLeft = 240
-        ExplicitTop = 1
-        ExplicitHeight = 24
       end
       object SpinEdit1: TSpinEdit
         Left = 80
         Top = 0
         Width = 145
-        Height = 25
+        Height = 22
         Anchors = [akLeft, akTop, akRight, akBottom]
         MaxValue = 0
         MinValue = 0
@@ -107,10 +102,6 @@ object fmMain: TfmMain
     Align = alClient
     Caption = #1054#1090#1083#1072#1076#1086#1095#1085#1099#1081' '#1074#1099#1074#1086#1076
     TabOrder = 1
-    ExplicitLeft = 208
-    ExplicitTop = 48
-    ExplicitWidth = 185
-    ExplicitHeight = 105
     object JvScrollBox1: TJvScrollBox
       Left = 2
       Top = 15
@@ -120,15 +111,13 @@ object fmMain: TfmMain
       BevelInner = bvNone
       BevelOuter = bvNone
       BorderStyle = bsNone
+      DoubleBuffered = True
       Color = clWhite
       ParentColor = False
+      ParentDoubleBuffered = False
       TabOrder = 0
       HintColor = clBlack
       OnPaint = JvScrollBox1Paint
-      ExplicitLeft = 1
-      ExplicitTop = 1
-      ExplicitWidth = 543
-      ExplicitHeight = 255
     end
   end
 end
