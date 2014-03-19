@@ -212,6 +212,7 @@ end;
 
 procedure TBTrieController.DeleteChain(var aNode: TNode);
 begin
+  Assert(aNode.IsLeaf);
   if Assigned(aNode.Sibling) then
     DeleteChain(aNode.Sibling);
   FreeAndNil(aNode);
@@ -234,19 +235,56 @@ var
   vOldCurNode: TNode;
   vNeighbour: TNode;
   vNoNeighbour: Boolean;
+  vInd: Integer;
 begin
   vChainCounter := 0;
   vNeighbour := aNode.Parent.Child;
   vNoNeighbour := vNeighbour = aNode;
-  while vNeighbour.Sibling <> aNode do
-    vNeighbour := vNeighbour.Sibling;
-  vOldCurNode := aNode;
-  vTempNode := TNode.Create;
+   vTempNode := TNode.Create;
   if vNoNeighbour then
-    aNode.Sibling.Child := vTempNode
+    aNode.Parent.Child := vTempNode
   else
+  begin
+    while vNeighbour.Sibling <> aNode do
+      vNeighbour := vNeighbour.Sibling;
     vNeighbour.Sibling := vTempNode;
+  end;
+  vOldCurNode := aNode;
+  vTempNode.Data.ActualSize := 0;
+  vTempNode.Data.DocData := nil;
+  vTempNode.StartID := -1;
+  vTempNode.EndID := -1;
   vTempNode.IsLeaf := True;
+  vTempNode.Parent := aNode.Parent;
+  while Assigned(vOldCurNode) do
+  begin
+    vInd := 0;
+    while vInd < High(vOldCurNode.Data.DocData) do
+    begin
+      if vTempNode.Data.ActualSize + vOldCurNode.Data.DocData[vInd].DocDataSize >= (cMaxChunkSize * (100 - cReservedProcent))/100 then
+      begin
+        vTempNode.Data.Size := cMaxChunkSize;
+        vTempNode.Sibling := TNode.Create;
+        vTempNode := vTempNode.Sibling;
+        vTempNode.Data.ActualSize := 0;
+        vTempNode.Data.DocData := nil;
+        vTempNode.StartID := -1;
+        vTempNode.EndID := -1;
+        vTempNode.IsLeaf := True;
+        vTempNode.Parent := aNode.Parent;
+      end;
+      SetLength(vTempNode.Data.DocData, Length(vTempNode.Data.DocData) + 1);
+      vTempNode.Data.DocData[High(vTempNode.Data.DocData)] := vOldCurNode.Data.DocData[vInd];
+      vTempNode.Data.ActualSize := vTempNode.Data.ActualSize + vOldCurNode.Data.DocData[vInd].DocDataSize;
+      if (vTempNode.StartID = -1) or (vTempNode.StartID > vOldCurNode.Data.DocData[vInd].DocID) then
+        vTempNode.StartID := vOldCurNode.Data.DocData[vInd].DocID;
+      if (vTempNode.EndID = -1) or (vTempNode.StartID < vOldCurNode.Data.DocData[vInd].DocID) then
+        vTempNode.EndID := vOldCurNode.Data.DocData[vInd].DocID;
+      Inc(vInd);
+    end;
+    vOldCurNode := vOldCurNode.Sibling;
+  end;
+  vTempNode.Data.Size := vTempNode.Data.ActualSize + Round((vTempNode.Data.ActualSize * cReservedProcent)/100);
   DeleteChain(aNode);
 end;
 
