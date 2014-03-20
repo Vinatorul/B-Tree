@@ -60,7 +60,7 @@ var
   i: Integer;
 begin
   for i := 0 to FRandomTestCounter - 1 do
-    FBTrie.AddData(Random(10000), Random(1024));
+    FBTrie.AddData(Random(250000), Random(4096));
   FBTrie.DebugDraw(JvScrollBox1.Canvas);
 end;
 
