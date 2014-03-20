@@ -53,8 +53,8 @@ type
   end;
 
 const
-  cChunkSize = 4096;
-  cMaxChunkSize = 65536;
+  cChunkSize = 10;
+  cMaxChunkSize = 100;
   cReservedProcent = 20;
 
 implementation
@@ -207,10 +207,10 @@ procedure TBTrieController.DebugDraw(const aCanvas: TCanvas);
       aCanvas.TextOut(aX + 7, aY + 35, IntToStr(aNode.ChildsCounter));
     if Assigned(aNode.Sibling) then
     begin
-      DrawNode(aNode.Sibling, aX + 80 + 200*(FRank - aLevel - 1), aY, aLevel);
+      DrawNode(aNode.Sibling, aX + 80 + 300*(FRank - aLevel - 1), aY, aLevel);
       aCanvas.Brush.Color := clBlack;
       aCanvas.MoveTo(aX + 30, aY + 30);
-      aCanvas.LineTo(aX + 110 + 200*(FRank - aLevel - 1), aY + 30);
+      aCanvas.LineTo(aX + 110 + 300*(FRank - aLevel - 1), aY + 30);
     end;
     if Assigned(aNode.Child) then
     begin
@@ -253,9 +253,9 @@ var
   vChildChainToMoveStart: TNode;
   vChildChainToMoveEnd: TNode;
   vTempChainEnd: TNode;
-  vChainsToDelete: TArray<TNode>;
   vChainChildToUniteLast: TNode;
   i: Integer;
+  vNode: TNode;
 begin
   Assert(Assigned(aNode.Parent));
   Assert(not aNode.Parent.IsLeaf);
@@ -267,10 +267,11 @@ begin
     FRoot.ChildsCounter := CountChilds(FRoot);
     FRoot.StartID := vTempNode.StartID;
     FRoot.EndID := vTempNode.EndID;
+    FRoot.IsLeaf := False;
     vTempNode.Parent := FRoot;
     FRank := FRank + 1;
   end;
-  vChainsToDelete := nil;
+  vNode := aNode.Parent;
   vTempNode := aNode.Parent;
   repeat
     vTempChainCounter := 1;
@@ -285,7 +286,6 @@ begin
         if Assigned(vTempChild.Sibling) then
           vChildChainToMoveStart := vTempChild.Sibling;
         vTempChainEnd := vTempChild;
-        vTempNode.EndID := vTempChainEnd.EndID;
       end;
     end;
     if vTempChainCounter <= FRank then
@@ -300,6 +300,7 @@ begin
     begin
       vTempNode.Sibling := TNode.Create;
       vTempNode.Sibling.Parent := vTempNode.Parent;
+      vTempNode.Parent.ChildsCounter := CountChilds(vTempNode.Parent);
       vTempNode.Sibling.EndID := -1;
     end;
     vTempNode := vTempNode.Sibling;
@@ -314,9 +315,7 @@ begin
       end;
       vChildChainToMoveEnd.Sibling := vTempNode.Child;
       vTempNode.Child := vChildChainToMoveStart;
-      vTempNode.StartID := vChildChainToMoveStart.StartID;
-      if vTempNode.EndID = -1 then
-        vTempNode.EndID := vChildChainToMoveEnd.EndID;
+      UpdateParents(vChildChainToMoveEnd);
       if CountChilds(vTempNode.Parent) > FRank then
         SplitParent(vTempNode)
       else
@@ -324,11 +323,6 @@ begin
     end
     else
     begin
-      if Assigned(vChildChainToMoveStart.Sibling) then
-      begin
-        SetLength(vChainsToDelete, Length(vChainsToDelete) + 1);
-        vChainsToDelete[High(vChainsToDelete)] := vChildChainToMoveStart.Sibling;
-      end;
       vChainChildToUniteLast := vChildChainToMoveStart.Child;
       while Assigned(vChainChildToUniteLast.Sibling) do
         vChainChildToUniteLast := vChainChildToUniteLast.Sibling;
@@ -341,21 +335,40 @@ begin
         while Assigned(vChainChildToUniteLast.Sibling) do
         begin
           vChainChildToUniteLast.Parent := vChildChainToMoveStart;
+          UpdateParents(vChainChildToUniteLast);
           vChainChildToUniteLast := vChainChildToUniteLast.Sibling;
         end;
       end;
+      vChildChainToMoveEnd.Sibling := vTempNode.Child;
+      while Assigned(vChildChainToMoveEnd.Sibling) do
+      begin
+        vChildChainToMoveEnd := vChildChainToMoveEnd.Sibling;
+        vChainChildToUniteLast.Sibling := vChildChainToMoveEnd.Child;
+        vChildChainToMoveEnd.Child := nil;
+        while Assigned(vChainChildToUniteLast.Sibling) do
+        begin
+          vChainChildToUniteLast.Parent := vChildChainToMoveStart;
+          UpdateParents(vChainChildToUniteLast);
+          vChainChildToUniteLast := vChainChildToUniteLast.Sibling;
+        end;
+      end;
+      if Assigned(vChildChainToMoveStart.Sibling) then
+      begin
+        DeleteChain(vChildChainToMoveStart.Sibling);
+        Assert(vChildChainToMoveStart.Sibling = nil);
+      end;
       vTempNode.Child := vChildChainToMoveStart;
-      vTempNode.StartID := vChildChainToMoveStart.StartID;
-      if vTempNode.EndID = -1 then
-        vTempNode.EndID := vChildChainToMoveEnd.EndID;
+      UpdateParents(vChildChainToMoveStart);
+      vTempNode.ChildsCounter := CountChilds(vTempNode);
       vTempNode := vTempNode.Child;
     end;
   until vChildChainToMoveStart.IsLeaf;
+  if CountChilds(vNode.Parent) > FRank then
+    SplitParent(vNode);
+  vNode.Parent.ChildsCounter := CountChilds(vNode.Parent);
   if CountChilds(vTempNode.Parent) > FRank then
     SplitParent(vTempNode);
   vTempNode.Parent.ChildsCounter := CountChilds(vTempNode.Parent);
-  for i := 0 to High(vChainsToDelete) do
-    DeleteChain(vChainsToDelete[i]);
 end;
 
 procedure TBTrieController.SplitSelf(var aNode: TNode);
@@ -367,6 +380,8 @@ var
   vInd: Integer;
   vNode: TNode;
 begin
+  Assert(aNode.IsLeaf);
+  Assert(Assigned(aNode));
   vNode := aNode;
   vNeighbour := aNode.Parent.Child;
   vNoNeighbour := vNeighbour = aNode;
@@ -418,18 +433,27 @@ begin
     Round((vTempNode.Data.ActualSize * cReservedProcent)/100);
   if CountChilds(vTempNode.Parent) > FRank then
     SplitParent(vTempNode);
-  vTempNode.Parent.ChildsCounter := CountChilds(vTempNode.Parent);
+  vNode.Parent.ChildsCounter := CountChilds(vNode.Parent);
   DeleteChain(vNode);
 end;
 
 procedure TBTrieController.UpdateParents(const aNode: TNode);
+var
+  vChild: TNode;
 begin
   if not Assigned(aNode.Parent) then
     Exit;
-  if aNode.Parent.StartID > aNode.StartID then
-    aNode.Parent.StartID := aNode.StartID;
-  if aNode.Parent.EndID < aNode.EndID then
-    aNode.Parent.EndID := aNode.EndID;
+  vChild := aNode.Parent.Child;
+  vChild.Parent.StartID := 100000;
+  vChild.Parent.EndID := -1;
+  while Assigned(vChild) do
+  begin
+    if vChild.Parent.StartID > vChild.StartID then
+      vChild.Parent.StartID := vChild.StartID;
+    if vChild.Parent.EndID < vChild.EndID then
+      vChild.Parent.EndID := vChild.EndID;
+    vChild := vChild.Sibling;
+  end;
   UpdateParents(aNode.Parent);
 end;
 
