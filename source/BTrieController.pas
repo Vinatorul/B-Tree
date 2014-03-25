@@ -365,6 +365,8 @@ begin
     vNewParent.Parent.ChildsCounter := CountChilds(vNewParent.Parent);
     if vNewParent.Parent.ChildsCounter > FRank then
       SplitParent(vNewParent);
+    if vNewParent.Child.IsLeaf then
+      UpdateParents(vNewParent.Child);
   end;
 end;
 
