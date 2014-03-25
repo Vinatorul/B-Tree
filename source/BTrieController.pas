@@ -56,8 +56,8 @@ type
   end;
 
 const
-  cChunkSize = 10;
-  cMaxChunkSize = 30;
+  cChunkSize = 5;
+  cMaxChunkSize = 20;
   cReservedProcent = 20;
 
 implementation
@@ -362,8 +362,6 @@ begin
       vTempNode.Child := vChildChainToMoveStart;
       if CountChilds(vTempNode.Parent) > FRank then
         SplitParent(vTempNode)
-      else
-        SplitSelf(vTempNode.Child);
     end
     else
     begin
@@ -385,6 +383,8 @@ begin
       vTempNode := vTempNode.Child;
     end;
   until vChildChainToMoveStart.IsLeaf;
+  if Assigned(vChildChainToMoveStart) then
+    SplitParent(vChildChainToMoveStart);
   if CountChilds(vNode.Parent) > FRank then
     SplitParent(vNode);
   vNode.Parent.ChildsCounter := CountChilds(vNode.Parent);
