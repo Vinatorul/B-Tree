@@ -36,15 +36,14 @@ type
   end;
 
   TBTrieController = class
-  public
-    constructor Create;
-
-    procedure AddData(const aID: Integer; const aDataSize: Integer);
-
-    procedure DebugDraw(const aCanvas: TCanvas);
-  private
+  strict private
     FRoot: TNode;
     FRank: Integer;
+
+    FDataAllocated: Integer;
+    FDataUsed: Integer;
+    FBlocksAllocated: Integer;
+
     function GetNode(const aID: Integer): TNode;
     procedure UpdateParents(const aNode: TNode);
     procedure SplitParent(const aNode: TNode);
@@ -54,11 +53,22 @@ type
     procedure PushBackChildsChain(var aNode, aChild: TNode);
     function UniteNodes(var aFirstNode, aSecondNode: TNode): TNode;
     function CountChilds(const aNode: TNode): Integer;
+  public
+
+    constructor Create;
+
+    procedure AddData(const aID: Integer; const aDataSize: Integer);
+
+    procedure DebugDraw(const aCanvas: TCanvas);
+
+    property DataAlloc: Integer read FDataAllocated;
+    property DataInUse: Integer read FDataUsed;
+    property TotalBlocksAlloc: Integer read FBlocksAllocated;
   end;
 
 const
-  cChunkSize = 100;
-  cMaxChunkSize = 1000;
+  cChunkSize = 4096;
+  cMaxChunkSize = 32768;
   cReservedProcent = 20;
 
 implementation
@@ -72,6 +82,7 @@ var
   i: Integer;
   vDocDataDelta: Integer;
   vDocInd: Integer;
+  vRealloc: Boolean;
 begin
   if FRank = 0 then
   begin
@@ -84,6 +95,9 @@ begin
     FRoot.Data.DocData[0].DocDataSize := aDataSize;
     FRoot.Data.Size := cChunkSize;
     FRoot.Data.ActualSize := aDataSize;
+    FBlocksAllocated := 1;
+    FDataAllocated := FRoot.Data.Size;
+    FDataUsed := aDataSize;
     FRank := 1;
     FRoot.Level := FRank;
   end
@@ -105,15 +119,23 @@ begin
               vDocInd := i;
               Break;
             end;
+          FDataUsed := FDataUsed + vDocDataDelta;
           if (vTempNode.Data.ActualSize + vDocDataDelta < (cMaxChunkSize * (100 - cReservedProcent))/100) or
            ((vDocInd >= 0) and (vTempNode.Data.ActualSize + vDocDataDelta < cMaxChunkSize)) then
           begin
+            vRealloc := False;
             if vDocInd < 0 then
               while vTempNode.Data.ActualSize + vDocDataDelta >= (vTempNode.Data.Size * (100 - cReservedProcent))/100 do
-                vTempNode.Data.Size := vTempNode.Data.Size * 2
+              begin
+                vTempNode.Data.Size := vTempNode.Data.Size * 10;
+                vRealloc := True;
+              end
             else
               while vTempNode.Data.ActualSize + vDocDataDelta >= cMaxChunkSize do
-                vTempNode.Data.Size := vTempNode.Data.Size * 2;
+              begin
+                vTempNode.Data.Size := vTempNode.Data.Size * 10;
+                vRealloc := True;
+              end;
             vTempNode.Data.ActualSize := vTempNode.Data.ActualSize + vDocDataDelta;
             if vDocInd >= 0 then
               vTempNode.Data.DocData[vDocInd].DocDataSize := aDataSize
@@ -129,6 +151,11 @@ begin
               vTempNode.StartID := aID;
             if vTempNode.EndID < aID then
               vTempNode.EndID := aID;
+            if vRealloc then
+            begin
+              Inc(FBlocksAllocated);
+              FDataAllocated := FDataAllocated + vTempNode.Data.Size;
+            end;
             UpdateParents(vTempNode);
           end
           else
@@ -213,10 +240,10 @@ procedure TBTrieController.DebugDraw(const aCanvas: TCanvas);
       aCanvas.TextOut(aX + 7, aY + 35, IntToStr(aNode.ChildsCounter));
     if Assigned(aNode.Sibling) then
     begin
-      DrawNode(aNode.Sibling, aX + 80 + 500*(FRank - aLevel - 1)*(FRank - aLevel - 1), aY, aLevel);
+      DrawNode(aNode.Sibling, aX + 80 + 250*(FRank - aLevel - 1)*(FRank - aLevel - 1), aY, aLevel);
       aCanvas.Brush.Color := clBlack;
       aCanvas.MoveTo(aX + 30, aY + 30);
-      aCanvas.LineTo(aX + 110 + 500*(FRank - aLevel - 1)*(FRank - aLevel - 1), aY + 30);
+      aCanvas.LineTo(aX + 110 + 250*(FRank - aLevel - 1)*(FRank - aLevel - 1), aY + 30);
     end;
     if Assigned(aNode.Child) then
     begin
@@ -339,6 +366,17 @@ begin
   end
   else
     Exit;
+  if (not vStartNode.IsLeaf) and Assigned(vStartNode.Parent.Sibling) then
+  begin
+      vNewParent := vStartNode.Parent.Sibling;
+    while not vStartNode.IsLeaf do
+    begin
+      Assert(vStartNode.Child.IsLeaf or (vStartNode.ChildsCounter < 2));
+      vStartNode := vStartNode.Child;
+      vNewParent := vNewParent.Child;
+    end;
+    vStartNode.Parent := vNewParent;
+  end;
   if (not Assigned(vStartNode.Parent.Sibling)) or (vStartNode.IsLeaf) then
   begin
     if not Assigned(vStartNode.Parent.Sibling) then
@@ -369,9 +407,13 @@ begin
           vEndNode.Data.DocData[vOldDataEnd + i] := vNewParent.Child.Data.DocData[i];
         vEndNode.Data.ActualSize := vNewParent.Child.Data.ActualSize + vEndNode.Data.ActualSize;
         vEndNode.EndID := vNewParent.Child.EndID;
-        vEndNode.Data.Size := vEndNode.Data.ActualSize + Round((vEndNode.Data.ActualSize*cReservedProcent)/100);
+        if vEndNode.Data.Size >= vEndNode.Data.ActualSize then
+        begin
+          Dec(FBlocksAllocated);
+          FDataAllocated := FDataAllocated - vEndNode.Data.Size;
+        end;
         vNewParent.Child.Parent := nil;
-        vNewParent.Child := vNewParent.Child.Sibling;
+        vNewParent.Child := vNewParent.Child.Sibling;        
       end;
     end;
     vEndNode.Sibling := vNewParent.Child;
@@ -384,79 +426,86 @@ begin
       SplitParent(vNewParent);
     if vNewParent.Child.IsLeaf then
       UpdateParents(vNewParent.Child);
-  end;
+  end
 end;
 
 procedure TBTrieController.SplitSelf(var aNode: TNode);
 var
-  vTempNode: TNode;
   vOldCurNode: TNode;
-  vNeighbour: TNode;
-  vNoNeighbour: Boolean;
+  vTempNode: TNode;
   vInd: Integer;
-  vNode: TNode;
+  vLastChainNode: TNode;
+  vSplitedData: TArray<TData>;
+  vDataInd: Integer;
+  i: Integer;
+  vChainCount: Integer;
 begin
   Assert(aNode.IsLeaf);
   Assert(Assigned(aNode));
-  vNode := aNode;
-  vNeighbour := aNode.Parent.Child;
-  vNoNeighbour := vNeighbour = aNode;
-  vTempNode := TNode.Create;
-  vOldCurNode := aNode;
-  vTempNode.Level := vOldCurNode.Level;
-  if vNoNeighbour then
-    aNode.Parent.Child := vTempNode
-  else
+  vLastChainNode := aNode;
+  vChainCount := 1;
+  while Assigned(vLastChainNode.Sibling) do
   begin
-    while vNeighbour.Sibling <> aNode do
-      vNeighbour := vNeighbour.Sibling;
-    vNeighbour.Sibling := vTempNode;
-    Assert(vNeighbour.Level = vTempNode.Level);
+    Inc(vChainCount);
+    vLastChainNode := vLastChainNode.Sibling;
   end;
-  vTempNode.Data.ActualSize := 0;
-  vTempNode.Data.DocData := nil;
-  vTempNode.StartID := -1;
-  vTempNode.EndID := -1;
-  vTempNode.IsLeaf := True;
-  vTempNode.Parent := vOldCurNode.Parent;
+  
+  SetLength(vSplitedData, 1);
+  vDataInd := 0;
+  vOldCurNode := aNode;
 
-  Assert(Assigned(vTempNode.Parent));
   while Assigned(vOldCurNode) do
   begin
     vInd := 0;
     while vInd < Length(vOldCurNode.Data.DocData) do
     begin
-      if vTempNode.Data.ActualSize + vOldCurNode.Data.DocData[vInd].DocDataSize >= (cMaxChunkSize * (100 - cReservedProcent))/100 then
+      if vSplitedData[vDataInd].ActualSize + vOldCurNode.Data.DocData[vInd].DocDataSize >= (cMaxChunkSize * (100 - cReservedProcent))/100 then
       begin
-        vTempNode.Data.Size := cMaxChunkSize;
-        vTempNode.Sibling := TNode.Create;
-        vTempNode := vTempNode.Sibling;
-        vTempNode.Data.ActualSize := 0;
-        vTempNode.Data.DocData := nil;
-        vTempNode.StartID := -1;
-        vTempNode.EndID := -1;
-        vTempNode.IsLeaf := True;
-        vTempNode.Parent := vOldCurNode.Parent;
-        vTempNode.Level := vOldCurNode.Level;
-        Assert(Assigned(vTempNode.Parent));
+        vSplitedData[vDataInd].Size := cMaxChunkSize;
+        Inc(vDataInd);
+        SetLength(vSplitedData, vDataInd + 1);
+        vSplitedData[vDataInd].ActualSize := 0;
+        vSplitedData[vDataInd].DocData := nil;
       end;
-      SetLength(vTempNode.Data.DocData, Length(vTempNode.Data.DocData) + 1);
-      vTempNode.Data.DocData[High(vTempNode.Data.DocData)] := vOldCurNode.Data.DocData[vInd];
-      vTempNode.Data.ActualSize := vTempNode.Data.ActualSize + vOldCurNode.Data.DocData[vInd].DocDataSize;
-      if (vTempNode.StartID = -1) or (vTempNode.StartID > vOldCurNode.Data.DocData[vInd].DocID) then
-        vTempNode.StartID := vOldCurNode.Data.DocData[vInd].DocID;
-      if (vTempNode.EndID = -1) or (vTempNode.EndID < vOldCurNode.Data.DocData[vInd].DocID) then
-        vTempNode.EndID := vOldCurNode.Data.DocData[vInd].DocID;
+      SetLength(vSplitedData[vDataInd].DocData, Length(vSplitedData[vDataInd].DocData) + 1);
+      vSplitedData[vDataInd].DocData[High(vSplitedData[vDataInd].DocData)] := vOldCurNode.Data.DocData[vInd];
+      vSplitedData[vDataInd].ActualSize := vSplitedData[vDataInd].ActualSize + vOldCurNode.Data.DocData[vInd].DocDataSize;
       Inc(vInd);
     end;
     vOldCurNode := vOldCurNode.Sibling;
   end;
-  vTempNode.Data.Size := vTempNode.Data.ActualSize +
-    Round((vTempNode.Data.ActualSize * cReservedProcent)/100);
-  if CountChilds(vNode.Parent) > FRank then
-    SplitParent(vNode);
-  vNode.Parent.ChildsCounter := CountChilds(vNode.Parent);
-  DeleteChain(vNode);
+  if (vDataInd > vChainCount - 1) or (vSplitedData[vDataInd].ActualSize > vLastChainNode.Data.Size) then
+    vSplitedData[vDataInd].Size := cMaxChunkSize // cоздаётся новый блок
+  else if vDataInd = vChainCount - 1 then
+    vSplitedData[vDataInd].Size := vLastChainNode.Data.Size
+  else
+    vSplitedData[vDataInd].Size := cMaxChunkSize; //пишется в старый блок
+
+  vTempNode := aNode;
+  for i := 0 to High(vSplitedData) do
+  begin
+    vTempNode.Data := vSplitedData[i];
+    vTempNode.StartID := vTempNode.Data.DocData[0].DocID;
+    vTempNode.EndID := vTempNode.Data.DocData[High(vTempNode.Data.DocData)].DocID;
+    if (i < High(vSplitedData)) then
+    begin
+      if not Assigned(vTempNode.Sibling) then
+      begin
+        vTempNode.Sibling := TNode.Create;
+        vTempNode.Sibling.Level := vTempNode.Level;
+        vTempNode.Sibling.Parent := vTempNode.Parent;
+        vTempNode.Sibling.IsLeaf := True;
+        Inc(FBlocksAllocated);
+        FDataAllocated := FDataAllocated + vSplitedData[i+1].Size;
+      end;
+      vTempNode := vTempNode.Sibling;
+    end;
+  end;
+  if Assigned(vTempNode.Sibling) then
+    DeleteChain(vTempNode.Sibling);
+  if CountChilds(aNode.Parent) > FRank then
+    SplitParent(aNode);
+  aNode.Parent.ChildsCounter := CountChilds(aNode.Parent);
 end;
 
 function TBTrieController.UniteNodes(var aFirstNode, aSecondNode: TNode): TNode;
