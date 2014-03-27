@@ -57,8 +57,8 @@ type
   end;
 
 const
-  cChunkSize = 10;
-  cMaxChunkSize = 100;
+  cChunkSize = 100;
+  cMaxChunkSize = 1000;
   cReservedProcent = 20;
 
 implementation
@@ -213,10 +213,10 @@ procedure TBTrieController.DebugDraw(const aCanvas: TCanvas);
       aCanvas.TextOut(aX + 7, aY + 35, IntToStr(aNode.ChildsCounter));
     if Assigned(aNode.Sibling) then
     begin
-      DrawNode(aNode.Sibling, aX + 80 + 300*(FRank - aLevel - 1), aY, aLevel);
+      DrawNode(aNode.Sibling, aX + 80 + 500*(FRank - aLevel - 1)*(FRank - aLevel - 1), aY, aLevel);
       aCanvas.Brush.Color := clBlack;
       aCanvas.MoveTo(aX + 30, aY + 30);
-      aCanvas.LineTo(aX + 110 + 300*(FRank - aLevel - 1), aY + 30);
+      aCanvas.LineTo(aX + 110 + 500*(FRank - aLevel - 1)*(FRank - aLevel - 1), aY + 30);
     end;
     if Assigned(aNode.Child) then
     begin
@@ -298,7 +298,7 @@ end;
 
 procedure TBTrieController.SplitParent(const aNode: TNode);
 var
-  i: Integer;
+  i, vOldDataEnd: Integer;
   vTempNode: TNode;
   vStartNode: TNode;
   vEndNode: TNode;
@@ -357,6 +357,23 @@ begin
       vEndNode := vEndNode.Sibling;
     end;
     vEndNode.Parent := vNewParent;
+    if vEndNode.IsLeaf and Assigned(vNewParent.Child) then
+    begin
+      if vEndNode.Data.ActualSize + vNewParent.Child.Data.ActualSize < cMaxChunkSize then
+      begin
+        vOldDataEnd := High(vEndNode.Data.DocData);
+        SetLength(vEndNode.Data.DocData, Length(vEndNode.Data.DocData) +
+          Length(vNewParent.Child.Data.DocData));
+        Inc(vOldDataEnd);
+        for i := 0 to High(vNewParent.Child.Data.DocData) do
+          vEndNode.Data.DocData[vOldDataEnd + i] := vNewParent.Child.Data.DocData[i];
+        vEndNode.Data.ActualSize := vNewParent.Child.Data.ActualSize + vEndNode.Data.ActualSize;
+        vEndNode.EndID := vNewParent.Child.EndID;
+        vEndNode.Data.Size := vEndNode.Data.ActualSize + Round((vEndNode.Data.ActualSize*cReservedProcent)/100);
+        vNewParent.Child.Parent := nil;
+        vNewParent.Child := vNewParent.Child.Sibling;
+      end;
+    end;
     vEndNode.Sibling := vNewParent.Child;
     vNewParent.Child := vStartNode;
     vNewParent.ChildsCounter := CountChilds(vNewParent);
@@ -454,7 +471,7 @@ begin
   if not Assigned(aNode.Parent) then
     Exit;
   vChild := aNode.Parent.Child;
-  vChild.Parent.StartID := 100000;
+  vChild.Parent.StartID := 1231312312;
   vChild.Parent.EndID := -1;
   while Assigned(vChild) do
   begin
