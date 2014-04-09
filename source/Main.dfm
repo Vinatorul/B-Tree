@@ -67,7 +67,6 @@ object fmMain: TfmMain
         Margins.Top = 5
         Align = alRight
         Caption = ' '#1089#1083#1091#1095#1072#1081#1085#1099#1093' '#1079#1072#1087#1080#1089#1077#1081' '
-        ExplicitLeft = 249
         ExplicitHeight = 13
       end
       object btRandTest: TButton

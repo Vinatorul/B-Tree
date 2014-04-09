@@ -358,10 +358,13 @@ begin
           vEndNode.Data.DocData[vOldDataEnd + i] := vNewParent.Child.Data.DocData[i];
         vEndNode.Data.ActualSize := vNewParent.Child.Data.ActualSize + vEndNode.Data.ActualSize;
         vEndNode.EndID := vNewParent.Child.EndID;
-        if vEndNode.Data.Size >= vEndNode.Data.ActualSize then
+        Dec(FBlocksAllocated);
+        FDataAllocated := FDataAllocated - vEndNode.Data.Size;
+        if vEndNode.Data.Size < vEndNode.Data.ActualSize then
         begin
-          Dec(FBlocksAllocated);
-          FDataAllocated := FDataAllocated - vEndNode.Data.Size;
+          vEndNode.Data.Size := Round((100*vEndNode.Data.ActualSize) / (100 - cReservedProcent));
+          FDataAllocated := FDataAllocated + vEndNode.Data.Size;
+          Inc(FBlocksAllocated);
         end;
         vNewParent.Child.Parent := nil;
         vNewParent.Child := vNewParent.Child.Sibling;        
@@ -385,21 +388,12 @@ var
   vOldCurNode: TNode;
   vTempNode: TNode;
   vInd: Integer;
-  vLastChainNode: TNode;
   vSplitedData: TArray<TData>;
   vDataInd: Integer;
   i: Integer;
-  vChainCount: Integer;
 begin
   Assert(aNode.IsLeaf);
   Assert(Assigned(aNode));
-  vLastChainNode := aNode;
-  vChainCount := 1;
-  while Assigned(vLastChainNode.Sibling) do
-  begin
-    Inc(vChainCount);
-    vLastChainNode := vLastChainNode.Sibling;
-  end;
   
   SetLength(vSplitedData, 1);
   vDataInd := 0;
@@ -417,6 +411,7 @@ begin
         SetLength(vSplitedData, vDataInd + 1);
         vSplitedData[vDataInd].ActualSize := 0;
         vSplitedData[vDataInd].DocData := nil;
+        vSplitedData[vDataInd].Size := 0;
       end;
       SetLength(vSplitedData[vDataInd].DocData, Length(vSplitedData[vDataInd].DocData) + 1);
       vSplitedData[vDataInd].DocData[High(vSplitedData[vDataInd].DocData)] := vOldCurNode.Data.DocData[vInd];
@@ -425,16 +420,20 @@ begin
     end;
     vOldCurNode := vOldCurNode.Sibling;
   end;
-  if (vDataInd > vChainCount - 1) or (vSplitedData[vDataInd].ActualSize > vLastChainNode.Data.Size) then
-    vSplitedData[vDataInd].Size := cMaxChunkSize // cоздаётся новый блок
-  else if vDataInd = vChainCount - 1 then
-    vSplitedData[vDataInd].Size := vLastChainNode.Data.Size
-  else
-    vSplitedData[vDataInd].Size := cMaxChunkSize; //пишется в старый блок
 
   vTempNode := aNode;
   for i := 0 to High(vSplitedData) do
   begin
+    if vSplitedData[i].Size = 0 then
+    begin
+      if (vTempNode.Data.Size = 0) or (vSplitedData[i].ActualSize > vTempNode.Data.Size) then
+      begin
+        vSplitedData[i].Size := Round((100*vSplitedData[i].ActualSize) / (100 - cReservedProcent));
+        FDataAllocated := FDataAllocated + vSplitedData[i].Size;
+      end
+      else
+        vSplitedData[i].Size := vTempNode.Data.Size;
+    end;
     vTempNode.Data := vSplitedData[i];
     vTempNode.StartID := vTempNode.Data.DocData[0].DocID;
     vTempNode.EndID := vTempNode.Data.DocData[High(vTempNode.Data.DocData)].DocID;
@@ -446,6 +445,7 @@ begin
         vTempNode.Sibling.Level := vTempNode.Level;
         vTempNode.Sibling.Parent := vTempNode.Parent;
         vTempNode.Sibling.IsLeaf := True;
+        vTempNode.Sibling.Data.Size := 0;
         Inc(FBlocksAllocated);
         FDataAllocated := FDataAllocated + vSplitedData[i+1].Size;
       end;
